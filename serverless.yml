@@ -1,0 +1,19 @@
+service: jwt-lambda-auth0205
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  environment:
+    JWT_SECRET: ${env:JWT_SECRET}
+  region: ap-south-1
+
+functions:
+  app:
+    handler: handler.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: any
+
+plugins:
+  - serverless-offline
