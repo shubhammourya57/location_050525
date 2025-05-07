@@ -1,9 +1,11 @@
 // File: controllers/locationController.js
-const { uploadToS3, fetchFromS3 } = require('../middleware/uploadToS3');
+const { uploadToS3, fetchFromS3,uploadBufferToS3 } = require('../middleware/uploadToS3');
 const jwt = require('jsonwebtoken');
 const SECRET_KEY = process.env.JWT_SECRET; // Store in env in production
-
-exports.createLocation = async (req, res) => {
+const sharp = require('sharp');
+const path = require('path'); 
+// const { v4: uuidv4 } = require('uuid');
+exports.acreateLocation = async (req, res) => {
   const { locationID } = req.params;
   const locationData = req.body;
 
@@ -17,6 +19,52 @@ exports.createLocation = async (req, res) => {
     });
   } catch (error) {
     console.error("📦 S3 Upload Failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
+exports.createLocation = async (req, res) => {
+  const { locationID } = req.params;
+  const locationData = req.body; // assuming locationData sent as string
+  const file = req.file;
+
+  try {
+    let imageUrl = null;
+
+    if (file) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      let filename = file.originalname.replace(ext, '.png');
+      let buffer = file.buffer;
+      let contentType = 'image/png';
+
+      if (ext === '.tif' || ext === '.tiff') {
+        buffer = await sharp(file.buffer).png().toBuffer();
+      } else {
+        filename = file.originalname;
+        contentType = file.mimetype;
+      }
+
+      // Upload image
+      imageUrl = await uploadBufferToS3(buffer, filename, contentType);
+
+      // Attach image URL to locationData
+      locationData.imageUrl = imageUrl;
+    }
+
+    // Upload JSON with image reference
+    const result = await uploadToS3(locationData, locationID);
+
+    return res.status(200).json({
+      success: true,
+      message: "🎉 Location and image uploaded successfully!",
+      imageUrl,
+      data: locationData,  // <-- include all form data in response
+      s3Result: result,
+    });
+  } catch (error) {
+    console.error("📦 Upload Failed:", error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -43,9 +91,51 @@ exports.getLocation = async (req, res) => {
     });
   }
 };
-
-
 exports.updateLocation = async (req, res) => {
+  const { locationID } = req.params;
+  const locationData = req.body;
+  const file = req.file;
+
+  try {
+    let imageUrl = null;
+
+    if (file) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      let filename = file.originalname.replace(ext, '.png');
+      let buffer = file.buffer;
+      let contentType = 'image/png';
+
+      if (ext === '.tif' || ext === '.tiff') {
+        buffer = await sharp(file.buffer).png().toBuffer();
+      } else {
+        filename = file.originalname;
+        contentType = file.mimetype;
+      }
+
+      imageUrl = await uploadBufferToS3(buffer, filename, contentType);
+      locationData.imageUrl = imageUrl;
+    }
+
+    const result = await updateOnS3(locationData, locationID);
+
+    return res.status(200).json({
+      success: true,
+      message: "✏️ Location updated successfully!",
+      imageUrl,
+      data: locationData,
+      s3Result: result,
+    });
+  } catch (error) {
+    console.error("📦 Update Failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Update failed",
+    });
+  }
+};
+
+
+exports.bupdateLocation = async (req, res) => {
   const { locationID } = req.params;
   const updatedData = req.body;
 
@@ -107,10 +197,6 @@ exports.loginUser = async (req, res) => {
     });
   }
 };
-
-const sharp = require('sharp');
-const path = require('path');
-const { uploadBufferToS3 } = require('../middleware/uploadToS3');
 
 exports.uploadImage = async (req, res) => {
   try {

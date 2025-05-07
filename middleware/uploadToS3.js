@@ -81,6 +81,38 @@ const uploadBufferToS3 = async (buffer, filename, contentType) => {
   }
 };
 
+
+// const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+// const uploadBufferToS3 = async (buffer, filename, contentType) => {
+//   const key = `uploads/${uuidv4()}-${filename}`;
+
+//   const params = {
+//     Bucket: process.env.AWS_BUCKET_NAME,
+//     Key: key,
+//     Body: buffer,
+//     ContentType: contentType,
+//   };
+
+//   try {
+//     const command = new PutObjectCommand(params);
+//     await s3.send(command);
+
+//     // ⏳ Generate signed GET URL valid for 5 minutes (300 seconds)
+//     const getCommand = new GetObjectCommand({
+//       Bucket: process.env.AWS_BUCKET_NAME,
+//       Key: key,
+//     });
+
+//     const signedUrl = await getSignedUrl(s3, getCommand, { expiresIn: 300 }); // 5 minutes
+
+//     return signedUrl;
+//   } catch (err) {
+//     console.error("❌ Error uploading buffer to S3:", err);
+//     throw err;
+//   }
+// };
+
 module.exports = {
   uploadToS3,
   fetchFromS3,

@@ -4,7 +4,7 @@ const { createLocation,getLocation,updateLocation,deleteLocation,loginUser,uploa
 const authMiddleware = require('../middleware/authMiddleware'); // Assuming you have an auth middleware
 const upload = require('../middleware/uploadMiddleware');
 router.post('/loginUser',loginUser)
-router.post('/location/:locationID',authMiddleware,createLocation);
+router.post('/location/:locationID',authMiddleware, upload.single('file'),createLocation);
 router.get('/location/:locationID',authMiddleware, getLocation);
 router.put('/location/:locationID',authMiddleware, updateLocation);
 router.delete('/location/:locationID',authMiddleware,deleteLocation);
