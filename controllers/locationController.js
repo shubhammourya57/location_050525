@@ -198,6 +198,8 @@ exports.loginUser = async (req, res) => {
   }
 };
 
+
+
 exports.uploadImage = async (req, res) => {
   try {
     const file = req.file;
