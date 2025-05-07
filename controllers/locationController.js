@@ -107,3 +107,31 @@ exports.loginUser = async (req, res) => {
     });
   }
 };
+
+const sharp = require('sharp');
+const path = require('path');
+const { uploadBufferToS3 } = require('../middleware/uploadToS3');
+
+exports.uploadImage = async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const ext = path.extname(file.originalname).toLowerCase();
+    let filename = file.originalname.replace(ext, '.png');
+    let buffer = file.buffer;
+    let contentType = 'image/png';
+
+    if (ext === '.tif' || ext === '.tiff') {
+      buffer = await sharp(file.buffer).png().toBuffer();
+    } else {
+      filename = file.originalname;
+      contentType = file.mimetype;
+    }
+
+    const s3Url = await uploadBufferToS3(buffer, filename, contentType);
+    res.status(200).json({ url: s3Url });
+  } catch (err) {
+    res.status(500).json({ error: 'Upload failed', detail: err.message });
+  }
+};
