@@ -1,8 +1,13 @@
 const { S3Client, PutObjectCommand,GetObjectCommand  } = require('@aws-sdk/client-s3');
 const dotenv = require('dotenv');
 dotenv.config();
+const path = require('path');
+const fs = require("fs"); 
 const { v4: uuidv4 } = require('uuid');
 const { Readable } = require('stream');
+const { parse } = require('@fast-csv/parse');
+const { writeToStream } = require('@fast-csv/format');
+
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -10,6 +15,14 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
+const streamToBuffer = async (stream) => {
+  return await new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
+};
 
 const streamToString = async (stream) => {
   return await new Promise((resolve, reject) => {
@@ -18,6 +31,39 @@ const streamToString = async (stream) => {
     stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
     stream.on('error', reject);
   });
+};
+const downloadCSV = async () => {
+  const params = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: process.env.CSV_FILE_KEY,
+  };
+
+  const localPath = path.join(__dirname, '../public/uploads/location/location.csv'); // ✅ full file path
+   // ✅ writing to a file
+  
+
+  const command = new GetObjectCommand(params);
+  const data = await s3.send(command);
+
+
+  const buffer = await streamToBuffer(data.Body);
+  fs.writeFileSync(localPath, buffer);
+  
+  return localPath;
+};
+
+const uploadCSV = async (filePath, uploadKey = 'images/floors_updated.csv') => {
+  const fileContent = fs.readFileSync(filePath);
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: uploadKey,
+    Body: fileContent,
+    ContentType: 'text/csv',
+  });
+
+  await s3.send(command);
+  return uploadKey;
 };
 const uploadToS3 = async (jsonData, locationID) => {
   const params = {
@@ -58,7 +104,7 @@ const fetchFromS3 = async (locationID) => {
   }
 };
 const uploadBufferToS3 = async (buffer, filename, contentType) => {
-  const key = `uploads/${uuidv4()}-${filename}`;
+  const key = `uploads/${filename}`;
 
   const params = {
     Bucket: process.env.AWS_BUCKET_NAME,
@@ -80,6 +126,79 @@ const uploadBufferToS3 = async (buffer, filename, contentType) => {
     throw err;
   }
 };
+
+
+// const modifyCSV = async (inputPath) => {
+//   const outputPath = path.join(__dirname, '../public/floors_updated.csv');
+
+//   return new Promise((resolve, reject) => {
+//     const updatedRows = [];
+//     fs.createReadStream(inputPath)
+//       .pipe(csv({ headers: true, mapHeaders: ({ header }) => header.trim() }))
+//       .on('data', (row) => {
+//         const originalPath = row.s3_file_path;
+//         if (!originalPath) return;
+
+//         const extIndex = originalPath.lastIndexOf('/');
+//         const fileName = originalPath.substring(extIndex + 1).replace('.tiff', '');
+//         const newFileName = `${row.floor}_${fileName}.png`;
+
+//         row.s3_file_path = `images/${newFileName}`;
+//         row.image_format = 'PNG';
+//         updatedRows.push(row);
+//       })
+//       .on('end', () => {
+//         const ws = fs.createWriteStream(outputPath);
+//         writeToStream(ws, updatedRows, { headers: true })
+//           .on('finish', () => {
+//             resolve(outputPath);
+//           })
+//           .on('error', reject);
+//       })
+//       .on('error', reject);
+//   });
+// };
+
+const toSnakeCase = (str) => {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s]/gi, '') // remove special chars
+    .trim()
+    .replace(/\s+/g, '_');    // spaces to underscores
+};
+
+const modifyCSV = async (inputPath) => {
+  const outputPath = path.join(__dirname, '../public/floors_updated.csv');
+
+  return new Promise((resolve, reject) => {
+    const updatedRows = [];
+
+    fs.createReadStream(inputPath)
+      .pipe(parse({
+        headers: headers => headers.map(h => h.trim()) // Trim header names
+      }))
+      .on('data', (row) => {
+        const floor = row['floor'];
+        const locationId = row['location Id'];
+
+        if (locationId && floor) {
+          const floorFormatted = toSnakeCase(floor);
+          row['updated_image_path'] = `${locationId}/images/${floorFormatted}.png`;
+        }
+
+        updatedRows.push(row);
+      })
+      .on('end', () => {
+        const ws = fs.createWriteStream(outputPath);
+        writeToStream(ws, updatedRows, { headers: true })
+          .on('finish', () => resolve(outputPath))
+          .on('error', reject);
+      })
+      .on('error', reject);
+  });
+};
+
+
 
 
 // const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
@@ -117,4 +236,8 @@ module.exports = {
   uploadToS3,
   fetchFromS3,
   uploadBufferToS3,
+  downloadCSV,
+  uploadCSV,
+  modifyCSV,
+  streamToBuffer,
 };
